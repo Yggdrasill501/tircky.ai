@@ -1,0 +1,39 @@
+name: migration-order
+
+on:
+  pull_request:
+    paths: ["migrations/**"]
+
+jobs:
+  order:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Migrations apply in filename order, so a new migration whose timestamp
+      # predates one already on the base branch would apply out of order — or
+      # not at all, if the runner has already recorded a later name. The failure
+      # shows up on deploy, against real data.
+      - name: New migrations must sort after the base branch's newest
+        run: |
+          base="origin/${{ github.base_ref }}"
+          newest_base=$(git ls-tree -r --name-only "$base" -- migrations/ \
+            | grep -E '^migrations/[0-9]{14}_.*\.ts$' | sort | tail -1 | xargs -r basename)
+          echo "newest on ${{ github.base_ref }}: ${newest_base:-<none>}"
+
+          added=$(git diff --name-only --diff-filter=A "$base"...HEAD -- migrations/ \
+            | grep -E '^migrations/[0-9]{14}_.*\.ts$' || true)
+          if [ -z "$added" ]; then echo "no new migrations"; exit 0; fi
+
+          status=0
+          for f in $added; do
+            name=$(basename "$f")
+            echo "added: $name"
+            if [ -n "$newest_base" ] && [ "$name" \< "$newest_base" ]; then
+              echo "::error file=$f::$name sorts before $newest_base already on ${{ github.base_ref }}. Rename it with a later timestamp."
+              status=1
+            fi
+          done
+          exit $status

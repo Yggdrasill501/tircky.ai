@@ -1,0 +1,39 @@
+# Production overlay:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Adds the app image and closes the database and storage to the host — in
+# production nothing reaches them except over the compose network.
+
+services:
+  db:
+    ports: !reset []
+
+  storage:
+    ports:
+      - "127.0.0.1:${STORAGE_PORT:-9000}:9000"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-tricky}:${POSTGRES_PASSWORD:-tricky}@db:5432/${POSTGRES_DB:-tricky}
+      STORAGE_ENDPOINT: http://storage:9000
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-tricky}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-tricky}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-trickytricky}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

@@ -1,0 +1,53 @@
+# Local development stack. The same service definitions run in production via
+# docker-compose.prod.yml, which overlays the app image and drops the exposed
+# database port — dev/prod parity is the reason Postgres and MinIO are
+# containers here rather than a managed service.
+
+name: tricky
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tricky}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tricky}
+      POSTGRES_DB: ${POSTGRES_DB:-tricky}
+      # Deterministic collation, so ORDER BY does not change under a base
+      # image bump. A collation change silently corrupts text indexes.
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US --encoding=UTF8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tricky} -d ${POSTGRES_DB:-tricky}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  storage:
+    # MinIO's images are no longer published to Docker Hub; quay.io is the
+    # official registry. `minio/minio` there resolves to nothing at all.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-tricky}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-trickytricky}
+    ports:
+      - "${STORAGE_PORT:-9000}:9000"
+      - "${STORAGE_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - storage-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  db-data:
+  storage-data:

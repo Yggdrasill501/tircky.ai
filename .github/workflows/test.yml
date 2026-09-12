@@ -1,0 +1,99 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: tricky
+          POSTGRES_PASSWORD: tricky
+          POSTGRES_DB: tricky
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tricky -d tricky"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+      storage:
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+        env:
+          MINIO_ROOT_USER: tricky
+          MINIO_ROOT_PASSWORD: trickytricky
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "mc ready local"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://tricky_app:tricky_app@localhost:5433/tricky
+      DATABASE_ADMIN_URL: postgres://tricky:tricky@localhost:5433/tricky
+      DATABASE_APP_ROLE: tricky_app
+      DATABASE_APP_PASSWORD: tricky_app
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_BUCKET: tricky
+      STORAGE_ACCESS_KEY: tricky
+      STORAGE_SECRET_KEY: trickytricky
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Ensure database roles
+        run: pnpm db:roles
+
+      - name: Run migrations
+        run: pnpm db:migrate:latest
+
+      - name: Initialise object storage
+        run: pnpm storage:init
+
+      - name: Seed
+        run: pnpm db:seed
+
+      # The committed types must match what the migrations actually produce.
+      # Regenerating and diffing is what catches a migration that shipped
+      # without its type update — the drift is invisible until a query breaks.
+      - name: Check for type drift
+        run: |
+          pnpm db:generate-types
+          if ! git diff --quiet -- lib/db/types.ts; then
+            echo "::error::lib/db/types.ts is out of date. Run 'pnpm db:generate-types' and commit the result."
+            git diff -- lib/db/types.ts
+            exit 1
+          fi
+          echo "types are in sync"
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Row-level security
+        run: pnpm test:rls
+
+      - name: Build
+        run: pnpm build
+
+      # Migrations must be reversible. A down() that was never executed is a
+      # down() that does not work, and it is only ever needed under pressure.
+      - name: Migrations are reversible
+        run: |
+          pnpm db:migrate:down
+          pnpm db:migrate:down
+          pnpm db:migrate:latest
