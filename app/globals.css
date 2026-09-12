@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — lifted verbatim from the Claude Design canvas
+   (project "Tricky app design scope", Tricky.dc.html).
+   Values are exact, not snapped to a 4/8px grid.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Accent: one hue family. Accents share lightness + chroma, vary hue only. */
+  --color-accent-dark: oklch(0.74 0.08 220);
+  --color-accent-dark-hi: oklch(0.82 0.08 220);
+  --color-accent-light: oklch(0.62 0.08 220);
+  --color-accent-light-deep: oklch(0.55 0.08 220);
+  /* "Over target" — same L and C as the accent, hue rotated to amber.
+     Information, not alarm: it must not read louder than the accent. */
+  --color-over-dark: oklch(0.74 0.08 75);
+  --color-over-light: oklch(0.68 0.08 75);
+
+  --radius-tag: 3px;
+  --radius-chip: 4px;
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-bubble: 15px;
+  --radius-pill: 22px;
+  --radius-device: 36px;
+}
+
+/* Dark — the phone / logging surface. This is the primary theme. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0b0c0d;
+  --bg-screen: #0e0f10;
+  --bg-bar: #121415;
+  --bg-card: #141618;
+  --bg-tile: #16181a;
+  --bg-input: #1c1f21;
+
+  --line-hair: #1e2124;
+  --line: #22262a;
+  --line-strong: #282c2f;
+  --line-frame: #2a2e31;
+  --line-active: #33383b;
+  --line-dashed: #2f3437;
+
+  --text-1: #e9eaea;
+  --text-2: #a0a5a8;
+  --text-3: #6e7478;
+  --text-4: #5b6165;
+  --text-5: #4f5458;
+
+  --accent: var(--color-accent-dark);
+  --accent-hi: var(--color-accent-dark-hi);
+  --on-accent: #0b0c0d;
+  --over: var(--color-over-dark);
+
+  --track: #22262a;
+  --chart-dot: #3a3f43;
+  --chart-goal: #4f5458;
+}
+
+/* Light — the desktop / review surface. */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-canvas: #f6f5f2;
+  --bg-screen: #ffffff;
+  --bg-bar: #ffffff;
+  --bg-card: #ffffff;
+  --bg-tile: #fbfbf9;
+  --bg-input: #f1f0ec;
+
+  --line-hair: #efeeea;
+  --line: #e4e3de;
+  --line-strong: #e4e3de;
+  --line-frame: #d8d7d2;
+  --line-active: #c9c8c2;
+  --line-dashed: #d5d4ce;
+
+  --text-1: #14161a;
+  --text-2: #575c61;
+  --text-3: #85898d;
+  --text-4: #9a9ea2;
+  --text-5: #9a9ea2;
+
+  --accent: var(--color-accent-light);
+  --accent-hi: var(--color-accent-light-deep);
+  --on-accent: #ffffff;
+  --over: var(--color-over-light);
+
+  --track: #e8e7e2;
+  --chart-dot: #c3c2bc;
+  --chart-goal: #a9a8a2;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg-canvas); }
+
+body {
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hi); text-decoration: underline; }
+
+/* Every number in this product is tabular. Columns of weights and macros
+   have to scan vertically; proportional figures make that impossible. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mono micro-label: the recurring uppercase caption. */
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+input { font-family: inherit; }
+input[type="range"] { accent-color: var(--accent); }
+
+/* The quantity field in an entry row: a value you can type over, marked as
+   editable by a dashed underline rather than a box. */
+.qty-input {
+  width: 42px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--line-active);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: right;
+  outline: none;
+  padding: 0 1px;
+}
+.qty-input:focus { border-bottom-color: var(--accent); }
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-input { -moz-appearance: textfield; }
+
+@keyframes tk-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tk-blink {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.tk-in { animation: tk-in 0.25s ease-out; }
+.tk-blink { animation: tk-blink 1.2s infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-in, .tk-blink { animation: none; }
+}
+
+.scroll-y { overflow-y: auto; scrollbar-width: thin; }
+.scroll-y::-webkit-scrollbar { width: 6px; }
+.scroll-y::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
