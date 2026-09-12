@@ -1,10 +1,18 @@
 import type { NextConfig } from "next";
 
+/**
+ * `output: "standalone"` traces the minimal node_modules for the Docker image
+ * (see Dockerfile, runtime stage). It is meaningless on Vercel, which builds
+ * its own serverless output — and asking that builder for a standalone server
+ * it is going to discard is at best wasted work and at worst a build failure.
+ *
+ * So it is set only when NOT building on Vercel.
+ */
+const isVercel = Boolean(process.env.VERCEL);
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // Traces the exact node_modules the server needs, so the runtime image
-  // carries neither the toolchain nor the source tree.
-  output: "standalone",
+  ...(isVercel ? {} : { output: "standalone" as const }),
 };
 
 export default nextConfig;
