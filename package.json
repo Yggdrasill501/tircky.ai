@@ -23,6 +23,7 @@
     "db:migrate:up": "kysely migrate up",
     "db:migrate:down": "kysely migrate down",
     "db:migrate:status": "kysely migrate list",
+    "db:migrate:check": "kysely migrate list --fail-on-pending",
     "db:generate-types": "tsx scripts/generate-types.ts",
     "db:seed": "tsx scripts/seed.ts",
     "storage:init": "tsx scripts/storage-init.ts",
