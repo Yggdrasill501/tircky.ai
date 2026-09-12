@@ -17,7 +17,12 @@ services:
       # image bump. A collation change silently corrupts text indexes.
       POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US --encoding=UTF8"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # 5433, not 5432: a native Postgres on a developer machine binds
+      # 127.0.0.1:5432, and a loopback-specific bind beats Docker's wildcard —
+      # connections would silently reach the wrong server. This default must
+      # match DATABASE_URL in .env.example, which is what CI relies on when
+      # there is no .env file to substitute from.
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:

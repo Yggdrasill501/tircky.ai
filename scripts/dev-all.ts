@@ -38,12 +38,36 @@ async function waitForPostgres(timeoutMs = 60_000) {
   throw new Error(`Postgres did not become ready in ${timeoutMs / 1000}s: ${lastError}`);
 }
 
+async function waitForStorage(timeoutMs = 60_000) {
+  const endpoint = process.env.STORAGE_ENDPOINT ?? "http://localhost:9000";
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "";
+
+  while (Date.now() < deadline) {
+    try {
+      // MinIO's unauthenticated liveness probe. Cheaper and more reliable than
+      // shelling out to `mc`, which needs an alias configured first.
+      const res = await fetch(`${endpoint}/minio/health/live`);
+      if (res.ok) return;
+      lastError = `HTTP ${res.status}`;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`Storage did not become ready in ${timeoutMs / 1000}s: ${lastError}`);
+}
+
 async function main() {
   step("starting containers");
   run("docker", ["compose", "up", "-d"]);
 
   step("waiting for Postgres");
   await waitForPostgres();
+  console.log("  ready");
+
+  step("waiting for object storage");
+  await waitForStorage();
   console.log("  ready");
 
   step("ensuring local roles");

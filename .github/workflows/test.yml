@@ -13,27 +13,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: tricky
-          POSTGRES_PASSWORD: tricky
-          POSTGRES_DB: tricky
-        ports: ["5433:5432"]
-        options: >-
-          --health-cmd "pg_isready -U tricky -d tricky"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-
-      storage:
-        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        env:
-          MINIO_ROOT_USER: tricky
-          MINIO_ROOT_PASSWORD: trickytricky
-        ports: ["9000:9000"]
-        options: >-
-          --health-cmd "mc ready local"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+    # Deliberately NOT using `services:` containers.
+    #
+    # A service container cannot be given a command — GitHub inserts its
+    # options before the image name and never passes arguments — so MinIO
+    # starts bare, prints its usage, and exits. Beyond that specific failure,
+    # duplicating the stack in two places means CI and local development drift.
+    # Running the same docker-compose.yml a developer runs removes both
+    # problems at once.
 
     env:
       DATABASE_URL: postgres://tricky_app:tricky_app@localhost:5433/tricky
@@ -56,36 +43,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Ensure database roles
-        run: pnpm db:roles
-
-      - name: Run migrations
-        run: pnpm db:migrate:latest
-
-      # Every migration file on disk must be recorded as applied. `list
-      # --fail-on-pending` exits 0 on "No migrations found", so the count is
-      # checked too — a misresolved migrationFolder would otherwise pass while
-      # migrating nothing.
-      - name: Migrations are up to date
-        run: |
-          out=$(pnpm --silent db:migrate:check) || { echo "$out"; echo "::error::Pending migrations after 'migrate latest'."; exit 1; }
-          echo "$out"
-          on_disk=$(ls migrations | grep -cE '^[0-9]{14}_.*\.ts$')
-          applied=$(echo "$out" | grep -c '✓' || true)
-          if [ "$applied" -ne "$on_disk" ]; then
-            echo "::error::$on_disk migration files in migrations/, but $applied applied."
-            exit 1
-          fi
-
-      - name: Initialise object storage
-        run: pnpm storage:init
-
-      - name: Seed
-        run: pnpm db:seed
+      # Containers up, roles created, migrations applied, storage bucket made,
+      # seed run — the same command, in the same order, as a developer's first
+      # checkout.
+      - name: Bring up the stack
+        run: pnpm dev:all
 
       # The committed types must match what the migrations actually produce.
-      # Regenerating and diffing is what catches a migration that shipped
-      # without its type update — the drift is invisible until a query breaks.
+      # Regenerating and diffing catches a migration that shipped without its
+      # type update; that drift is invisible until a query breaks at runtime.
       - name: Check for type drift
         run: |
           pnpm db:generate-types
@@ -105,11 +71,23 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Migrations must be reversible. A down() that was never executed is a
-      # down() that does not work, and it is only ever needed under pressure.
+      # A down() that has never been executed is a down() that does not work,
+      # and it is only ever needed under pressure.
       - name: Migrations are reversible
         run: |
           pnpm db:migrate:down
           pnpm db:migrate:down
           pnpm db:migrate:latest
-          pnpm db:migrate:check
+
+      - name: Build the runtime and migrate images
+        run: |
+          docker build -t tricky:app .
+          docker build --target migrate -t tricky:migrate .
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
