@@ -21,6 +21,37 @@ import { SEARCH_PATH } from "./search-path";
 
 const SLOW_QUERY_MS = Number(process.env.DB_SLOW_QUERY_MS ?? 200);
 
+/**
+ * Serverless platforms give every concurrent invocation its own process, so a
+ * pool size that is sane on one long-lived container becomes that number times
+ * the number of warm lambdas. A small Postgres tops out around 100 connections
+ * and refuses the rest, which surfaces as intermittent "too many clients" under
+ * exactly the load you least want it under.
+ *
+ * One connection per instance, and let the platform's own pooler do the
+ * multiplexing — that is what a pooled connection string is for.
+ */
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+function defaultPoolMax(): number {
+  const explicit = process.env.DATABASE_POOL_MAX;
+  if (!explicit) return IS_SERVERLESS ? 1 : 10;
+
+  const max = Number(explicit);
+  // Explicit configuration is honoured — it is the operator's call — but a
+  // large pool on serverless is almost always an .env copied from a local
+  // machine rather than a decision, and it fails under load rather than at
+  // boot. Say so.
+  if (IS_SERVERLESS && max > 2) {
+    console.warn(
+      `[db] DATABASE_POOL_MAX=${max} on a serverless platform: each warm instance ` +
+        `holds its own pool, so the real connection count is this times the number ` +
+        `of instances. Unset it to use the serverless default of 1.`,
+    );
+  }
+  return max;
+}
+
 export interface PoolMetrics {
   total: number;
   idle: number;
@@ -36,6 +67,11 @@ function basePoolConfig(connectionString: string, max: number): PoolConfig {
     // Set on the connection itself rather than per-query. It must match
     // .config/kysely.config.ts — if they diverge, migrations create tables
     // somewhere the app cannot see and the failure reads as a missing table.
+    //
+    // Belt and braces: `ALTER ROLE ... SET search_path` is also applied to the
+    // app role (scripts/ensure-local-roles.ts), because a transaction-mode
+    // pooler such as PgBouncer may drop startup `options` entirely. The
+    // server-side default survives that; this does not.
     options: `-c search_path=${SEARCH_PATH}`,
   };
 }
@@ -92,7 +128,7 @@ const g = globalThis as unknown as {
 function appPool(): Pool {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set. Copy .env.example to .env.");
-  g.__pgApp ??= makePool(url, Number(process.env.DATABASE_POOL_MAX ?? 10), "app");
+  g.__pgApp ??= makePool(url, defaultPoolMax(), "app");
   return g.__pgApp;
 }
 

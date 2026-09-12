@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { formatError } from "../lib/errors";
 import { execFileSync } from "node:child_process";
 import { Client } from "pg";
 
@@ -30,12 +31,32 @@ async function waitForPostgres(timeoutMs = 60_000) {
       await client.end();
       return;
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = formatError(err);
       await client.end().catch(() => {});
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error(`Postgres did not become ready in ${timeoutMs / 1000}s: ${lastError}`);
+}
+
+async function waitForStorage(timeoutMs = 60_000) {
+  const endpoint = process.env.STORAGE_ENDPOINT ?? "http://localhost:9000";
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "";
+
+  while (Date.now() < deadline) {
+    try {
+      // MinIO's unauthenticated liveness probe. Cheaper and more reliable than
+      // shelling out to `mc`, which needs an alias configured first.
+      const res = await fetch(`${endpoint}/minio/health/live`);
+      if (res.ok) return;
+      lastError = `HTTP ${res.status}`;
+    } catch (err) {
+      lastError = formatError(err);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`Storage did not become ready in ${timeoutMs / 1000}s: ${lastError}`);
 }
 
 async function main() {
@@ -44,6 +65,10 @@ async function main() {
 
   step("waiting for Postgres");
   await waitForPostgres();
+  console.log("  ready");
+
+  step("waiting for object storage");
+  await waitForStorage();
   console.log("  ready");
 
   step("ensuring local roles");
@@ -62,6 +87,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("\ndev:all failed:", err instanceof Error ? err.message : err);
+  console.error("\ndev:all failed:", formatError(err));
   process.exit(1);
 });

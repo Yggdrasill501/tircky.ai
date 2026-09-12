@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { formatError } from "../lib/errors";
 import { uuidv7 } from "uuidv7";
 import { asSystem, closeConnections } from "../lib/db/client";
 
@@ -73,7 +74,7 @@ async function main() {
 }
 
 main().catch(async (err) => {
-  console.error("seed failed:", err instanceof Error ? err.message : err);
+  console.error("seed failed:", formatError(err));
   await closeConnections().catch(() => {});
   process.exit(1);
 });
