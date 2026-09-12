@@ -1,0 +1,1 @@
+tircky.ai
