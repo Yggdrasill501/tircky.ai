@@ -1,5 +1,7 @@
 import "dotenv/config";
+import { formatError } from "../lib/errors";
 import { Client } from "pg";
+import { SEARCH_PATH } from "../lib/db/search-path";
 
 /**
  * Create the roles the migrations expect, before they run.
@@ -42,6 +44,15 @@ async function main() {
     await client.query(`grant connect on database "${db}" to "${APP_ROLE}"`);
     await client.query(`grant usage on schema public to "${APP_ROLE}"`);
 
+    // Server-side default search path for this role.
+    //
+    // The pool also sends `options=-c search_path=...` at connection time, but
+    // a transaction-mode pooler (PgBouncer, and therefore Neon's and
+    // Supabase's pooled endpoints) can drop startup options. This survives
+    // that, because the server applies it on every connection for the role.
+    // Run the equivalent by hand against a managed database — see DEPLOYING.md.
+    await client.query(`alter role "${APP_ROLE}" set search_path = ${SEARCH_PATH}`);
+
     // Verify the property the whole RLS design depends on.
     const check = await client.query(
       "select rolsuper, rolbypassrls from pg_roles where rolname = $1",
@@ -60,6 +71,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("ensure-local-roles failed:", err instanceof Error ? err.message : err);
+  console.error("ensure-local-roles failed:", formatError(err));
   process.exit(1);
 });

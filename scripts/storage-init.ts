@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { formatError } from "../lib/errors";
 import { CreateBucketCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { env } from "../lib/env";
 import { s3Client } from "../lib/storage";
@@ -25,6 +26,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("storage init failed:", err instanceof Error ? err.message : err);
+  console.error("storage init failed:", formatError(err));
   process.exit(1);
 });

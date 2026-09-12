@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { formatError } from "../lib/errors";
 import { sql } from "kysely";
 import { uuidv7 } from "uuidv7";
 import { asSystem, closeConnections, withUser } from "../lib/db/client";
@@ -110,7 +111,7 @@ async function main() {
 }
 
 main().catch(async (err) => {
-  console.error("rls test error:", err instanceof Error ? err.message : err);
+  console.error("rls test error:", formatError(err));
   await closeConnections().catch(() => {});
   process.exit(1);
 });

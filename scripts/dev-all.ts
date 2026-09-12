@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { formatError } from "../lib/errors";
 import { execFileSync } from "node:child_process";
 import { Client } from "pg";
 
@@ -30,7 +31,7 @@ async function waitForPostgres(timeoutMs = 60_000) {
       await client.end();
       return;
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = formatError(err);
       await client.end().catch(() => {});
       await new Promise((r) => setTimeout(r, 1000));
     }
@@ -51,7 +52,7 @@ async function waitForStorage(timeoutMs = 60_000) {
       if (res.ok) return;
       lastError = `HTTP ${res.status}`;
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = formatError(err);
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
@@ -86,6 +87,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("\ndev:all failed:", err instanceof Error ? err.message : err);
+  console.error("\ndev:all failed:", formatError(err));
   process.exit(1);
 });
